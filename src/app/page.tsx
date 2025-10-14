@@ -2,23 +2,23 @@ const checklistItems = [
   {
     title: "Artwork quality",
     description:
-      "Start with clear imagery that looks good on screen; we will introduce print DPI checks in a later milestone."
+      "Start with clear imagery that looks good on screen; we will introduce print DPI checks in a later milestone.",
   },
   {
     title: "Book text limit",
     description:
-      "Large spine text is capped at 500 characters so layouts stay legible while we collect feedback."
+      "Large spine text is capped at 500 characters so layouts stay legible while we collect feedback.",
   },
   {
     title: "Guided tour",
     description:
-      "A first-time helper overlay is planned after the prototype becomes interactive."
+      "A first-time helper overlay is planned after the prototype becomes interactive.",
   },
   {
     title: "Shopify integration",
     description:
-      "Payment and fulfillment hooks will come after the core designer experience feels solid."
-  }
+      "Payment and fulfillment hooks will come after the core designer experience feels solid.",
+  },
 ];
 
 export default function Home() {
