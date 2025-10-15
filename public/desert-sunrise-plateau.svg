@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="800" viewBox="0 0 2400 800" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#5f1b1d" />
+      <stop offset="0.35" stop-color="#a13229" />
+      <stop offset="1" stop-color="#d86a4a" />
+    </linearGradient>
+    <linearGradient id="sunGlow" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffd9b7" stop-opacity="0.85" />
+      <stop offset="1" stop-color="#ffae68" stop-opacity="0.65" />
+    </linearGradient>
+    <linearGradient id="ridge" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#632726" />
+      <stop offset="1" stop-color="#442022" />
+    </linearGradient>
+    <linearGradient id="mesa" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#8b3731" />
+      <stop offset="1" stop-color="#6b2b29" />
+    </linearGradient>
+    <linearGradient id="foreground" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#2b181b" />
+      <stop offset="1" stop-color="#1d1014" />
+    </linearGradient>
+    <filter id="soften" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="40" />
+    </filter>
+  </defs>
+  <rect width="2400" height="800" fill="url(#sky)" />
+  <g filter="url(#soften)" opacity="0.35">
+    <ellipse cx="1200" cy="415" rx="560" ry="560" fill="#ffddba" />
+  </g>
+  <circle cx="1200" cy="420" r="230" fill="url(#sunGlow)" />
+  <path d="M0 520C180 500 320 470 480 470s300 40 460 38 300-60 448-60 320 60 460 58 280-46 380-54 172 10 172 10V800H0Z" fill="url(#ridge)" opacity="0.9" />
+  <path d="M0 600c160-20 260-70 420-68s280 68 440 70 300-64 440-70 320 54 480 52 320-88 460-98 240 44 240 44V800H0Z" fill="url(#mesa)" opacity="0.95" />
+  <path d="M0 720c200-34 360-124 540-120s320 124 520 128 340-128 520-136 320 98 460 110 260-54 360-74V800H0Z" fill="url(#foreground)" />
+  <g opacity="0.75">
+    <path d="M1080 640c32-28 64-54 100-70s76-22 116-20 80 10 118 30 74 52 114 84" fill="none" stroke="#32181d" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" opacity="0.45" />
+    <path d="M1120 680c24-22 46-44 78-58s74-18 108-14 66 16 96 34 60 44 90 72" fill="none" stroke="#471c20" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.35" />
+  </g>
+  <g opacity="0.9">
+    <path d="M1176 650c8-34 26-70 48-94s48-38 76-46 56-8 84-2 52 18 76 32 46 32 68 52" fill="none" stroke="#2c1316" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.5" />
+  </g>
+  <g opacity="0.7">
+    <path d="M1190 612c0-58 16-116 44-156s68-62 108-70 80 0 114 18 60 46 88 80" fill="none" stroke="#2f1619" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.4" />
+  </g>
+  <rect x="1174" y="548" width="52" height="160" fill="#1b0d11" rx="10" />
+</svg>

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
 
 type BookFormState = {
@@ -329,15 +330,18 @@ export default function DesignerPage() {
                 }}
               >
                 <div
-                  className="pointer-events-none absolute inset-0"
-                  style={{
-                    backgroundImage:
-                      "radial-gradient(circle at 20% 20%, rgba(14,165,233,0.3), rgba(37,99,235,0.6)), linear-gradient(135deg, rgba(99,102,241,0.25), rgba(14,165,233,0.25))",
-                    backgroundSize: `${180 * artZoom}px`,
-                    opacity: 0.85,
-                    ...artTransform,
-                  }}
-                />
+                  className="pointer-events-none absolute inset-0 overflow-hidden"
+                  style={artTransform}
+                >
+                  <Image
+                    src="/desert-sunrise-plateau.svg"
+                    alt="Warm desert landscape artwork behind the spines"
+                    fill
+                    priority
+                    className="object-cover opacity-90"
+                    sizes="(min-width: 1024px) 640px, 90vw"
+                  />
+                </div>
 
                 <div
                   className="pointer-events-none absolute h-0 border-t-2 border-green-400"
@@ -363,12 +367,13 @@ export default function DesignerPage() {
                 {layout.rects.map((rect) => (
                   <div
                     key={rect.id}
-                    className="absolute rounded-md border border-slate-900/20 shadow-sm"
+                    className="absolute rounded-md border shadow-sm"
                     style={{
                       width: rect.widthMm * PREVIEW_SCALE,
                       height: rect.heightMm * PREVIEW_SCALE,
                       transform: `translate(${rect.xMm * PREVIEW_SCALE}px, ${rect.yMm * PREVIEW_SCALE}px)`,
-                      backgroundColor: rect.color,
+                      borderColor: rect.color,
+                      backgroundColor: "transparent",
                     }}
                   >
                     <div className="pointer-events-none absolute bottom-2 left-1/2 w-[90%] -translate-x-1/2 rounded bg-white/80 px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-700">
