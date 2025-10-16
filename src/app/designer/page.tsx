@@ -1,7 +1,6 @@
 "use client";
 
-import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type BookFormState = {
   id: number;
@@ -37,12 +36,15 @@ type StackLayout = {
 
 const CM_TO_MM = 10;
 const GAP_MM = 2;
-const CLEARANCE_SIDE_MM = 20;
+const CLEARANCE_SIDE_MM = 10;
 const CLEARANCE_TOP_MM = 2;
 const CLEARANCE_BOTTOM_MM = 2;
+const ART_SAFE_MARGIN_SIDE_MM = 10;
+const ART_SAFE_MARGIN_VERTICAL_MM = 2;
 const TABLOID_WIDTH_MM = 17 * 25.4;
 const TABLOID_HEIGHT_MM = 11 * 25.4;
-const PREVIEW_SCALE = 2.4; // pixels per millimetre for the preview canvas.
+const PREVIEW_SCALE = 2; // pixels per millimetre for the preview canvas.
+const DEFAULT_ARTWORK_SRC = "/desert-sunrise-plateau.svg";
 
 const DEFAULT_BOOKS: BookFormState[] = [
   { id: 1, label: "Book 1", heightCm: 23.5, spineWidthCm: 4.25, color: "#2563eb" },
@@ -119,12 +121,75 @@ function formatClearanceSummary(metrics: StackMetrics): string {
   return `${widthCm} cm × ${heightCm} cm required including clearances`;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function computeArtworkBounds(metrics: StackMetrics) {
+  const safeWidthMm = metrics.totalWidthMm + ART_SAFE_MARGIN_SIDE_MM * 2;
+  const safeHeightMm = metrics.maxHeightMm + ART_SAFE_MARGIN_VERTICAL_MM * 2;
+  const containerWidthMm = metrics.requiredWidthMm;
+  const containerHeightMm = metrics.requiredHeightMm;
+  const minZoom = Math.max(
+    safeWidthMm / containerWidthMm,
+    safeHeightMm / containerHeightMm,
+  );
+
+  return {
+    safeWidthMm,
+    safeHeightMm,
+    containerWidthMm,
+    containerHeightMm,
+    minZoom,
+  } as const;
+}
+
+function computeOffsetLimits(
+  bounds: ReturnType<typeof computeArtworkBounds>,
+  zoom: number,
+) {
+  const artWidthMm = bounds.containerWidthMm * zoom;
+  const artHeightMm = bounds.containerHeightMm * zoom;
+  const horizontalRoomMm = Math.max((artWidthMm - bounds.safeWidthMm) / 2, 0);
+  const verticalRoomMm = Math.max((artHeightMm - bounds.safeHeightMm) / 2, 0);
+
+  return {
+    minX: -horizontalRoomMm / zoom,
+    maxX: horizontalRoomMm / zoom,
+    minY: -verticalRoomMm / zoom,
+    maxY: verticalRoomMm / zoom,
+  } as const;
+}
+
 export default function DesignerPage() {
   const [books, setBooks] = useState<BookFormState[]>(DEFAULT_BOOKS);
   const [nextId, setNextId] = useState<number>(DEFAULT_BOOKS.length + 1);
   const [artOffsetMm, setArtOffsetMm] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [artZoom, setArtZoom] = useState<number>(1);
+  const [artworkSrc, setArtworkSrc] = useState<string>(DEFAULT_ARTWORK_SRC);
+  const [uploadedArtworkSrc, setUploadedArtworkSrc] = useState<string | null>(null);
   const layout = useMemo(() => computeStackLayout(books), [books]);
+  const artworkBounds = useMemo(() => computeArtworkBounds(layout.metrics), [layout.metrics]);
+  const offsetLimits = useMemo(() => computeOffsetLimits(artworkBounds, artZoom), [artworkBounds, artZoom]);
+
+  useEffect(() => {
+    return () => {
+      if (uploadedArtworkSrc) {
+        URL.revokeObjectURL(uploadedArtworkSrc);
+      }
+    };
+  }, [uploadedArtworkSrc]);
+
+  useEffect(() => {
+    setArtZoom((current) => (current < artworkBounds.minZoom ? artworkBounds.minZoom : current));
+  }, [artworkBounds.minZoom]);
+
+  useEffect(() => {
+    setArtOffsetMm((current) => ({
+      x: clamp(current.x, offsetLimits.minX, offsetLimits.maxX),
+      y: clamp(current.y, offsetLimits.minY, offsetLimits.maxY),
+    }));
+  }, [offsetLimits]);
 
   const handleUpdateBook = (id: number, key: keyof BookFormState, value: string) => {
     setBooks((current) =>
@@ -157,7 +222,7 @@ export default function DesignerPage() {
     setBooks((current) => (current.length > 1 ? current.filter((book) => book.id !== id) : current));
   };
 
-  const artTransform = {
+  const artTransformStyle = {
     transform: `translate(${artOffsetMm.x * PREVIEW_SCALE}px, ${artOffsetMm.y * PREVIEW_SCALE}px) scale(${artZoom})`,
     transformOrigin: "center",
   } as const;
@@ -254,7 +319,7 @@ export default function DesignerPage() {
               <span className="font-semibold text-slate-900">Collection width:</span> {layout.metrics.collectionWidthCm.toFixed(2)} cm
             </p>
             <p className="mt-1">Gap between books: 2 mm (fixed)</p>
-            <p className="mt-1">Top clearance: 2 mm • Bottom clearance: 2 mm • Side clearance: 20 mm</p>
+            <p className="mt-1">Top clearance: 2 mm • Bottom clearance: 2 mm • Side clearance: 10 mm</p>
           </div>
         </aside>
 
@@ -276,39 +341,74 @@ export default function DesignerPage() {
             </header>
 
             <div className="mt-6 grid gap-5 md:grid-cols-3">
+              <label className="flex flex-col gap-1 text-sm md:col-span-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Artwork image</span>
+                <input
+                  type="file"
+                  accept="image/jpeg"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) {
+                      return;
+                    }
+                    if (file.type !== "image/jpeg" && file.type !== "image/pjpeg") {
+                      return;
+                    }
+                    const objectUrl = URL.createObjectURL(file);
+                    setArtworkSrc(objectUrl);
+                    setUploadedArtworkSrc((previous) => {
+                      if (previous) {
+                        URL.revokeObjectURL(previous);
+                      }
+                      return objectUrl;
+                    });
+                  }}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-brand/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand"
+                />
+                <span className="text-xs text-slate-500">Upload a JPEG to replace the default artwork.</span>
+              </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Horizontal offset (mm)</span>
                 <input
                   type="range"
-                  min={-40}
-                  max={40}
-                  step={1}
+                  min={offsetLimits.minX}
+                  max={offsetLimits.maxX}
+                  step={0.5}
                   value={artOffsetMm.x}
-                  onChange={(event) => setArtOffsetMm((prev) => ({ ...prev, x: Number(event.target.value) }))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setArtOffsetMm((prev) => ({ ...prev, x: clamp(value, offsetLimits.minX, offsetLimits.maxX) }));
+                  }}
                 />
-                <span className="text-xs text-slate-500">{artOffsetMm.x} mm</span>
+                <span className="text-xs text-slate-500">{artOffsetMm.x.toFixed(1)} mm</span>
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vertical offset (mm)</span>
                 <input
                   type="range"
-                  min={-40}
-                  max={40}
-                  step={1}
+                  min={offsetLimits.minY}
+                  max={offsetLimits.maxY}
+                  step={0.5}
                   value={artOffsetMm.y}
-                  onChange={(event) => setArtOffsetMm((prev) => ({ ...prev, y: Number(event.target.value) }))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setArtOffsetMm((prev) => ({ ...prev, y: clamp(value, offsetLimits.minY, offsetLimits.maxY) }));
+                  }}
                 />
-                <span className="text-xs text-slate-500">{artOffsetMm.y} mm</span>
+                <span className="text-xs text-slate-500">{artOffsetMm.y.toFixed(1)} mm</span>
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Zoom</span>
                 <input
                   type="range"
-                  min={0.85}
+                  min={artworkBounds.minZoom}
                   max={1.25}
                   step={0.01}
                   value={artZoom}
-                  onChange={(event) => setArtZoom(Number(event.target.value))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setArtZoom(value < artworkBounds.minZoom ? artworkBounds.minZoom : value);
+                  }}
                 />
                 <span className="text-xs text-slate-500">{(artZoom * 100).toFixed(0)}%</span>
               </label>
@@ -330,33 +430,12 @@ export default function DesignerPage() {
                 }}
               >
                 <div
-                  className="pointer-events-none absolute inset-0 overflow-hidden"
-                  style={artTransform}
-                >
-                  <Image
-                    src="/desert-sunrise-plateau.svg"
-                    alt="Warm desert landscape artwork behind the spines"
-                    fill
-                    priority
-                    className="object-cover opacity-90"
-                    sizes="(min-width: 1024px) 640px, 90vw"
-                  />
-                </div>
-
-                <div
-                  className="pointer-events-none absolute h-0 border-t-2 border-green-400"
+                  className="pointer-events-none absolute inset-0 overflow-hidden opacity-90"
                   style={{
-                    left: CLEARANCE_SIDE_MM * PREVIEW_SCALE,
-                    right: CLEARANCE_SIDE_MM * PREVIEW_SCALE,
-                    top: CLEARANCE_TOP_MM * PREVIEW_SCALE,
-                  }}
-                />
-                <div
-                  className="pointer-events-none absolute h-0 border-t-2 border-green-400"
-                  style={{
-                    left: CLEARANCE_SIDE_MM * PREVIEW_SCALE,
-                    right: CLEARANCE_SIDE_MM * PREVIEW_SCALE,
-                    top: (CLEARANCE_TOP_MM + layout.metrics.maxHeightMm) * PREVIEW_SCALE,
+                    ...artTransformStyle,
+                    backgroundImage: `url(${artworkSrc})`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
                   }}
                 />
 
