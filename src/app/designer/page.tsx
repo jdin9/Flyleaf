@@ -200,6 +200,8 @@ export default function DesignerPage() {
     widthMm: DEFAULT_LAYOUT.metrics.requiredWidthMm,
     heightMm: DEFAULT_LAYOUT.metrics.requiredHeightMm,
   });
+  const pdfPreview: { pdfUrl: string; pageImages: string[] } | null = null;
+  const isGeneratingPdf = false;
   const layout = useMemo(() => computeStackLayout(books), [books]);
   const artworkBounds = useMemo(
     () => computeArtworkBounds(layout.metrics, artworkDimensionsMm),
