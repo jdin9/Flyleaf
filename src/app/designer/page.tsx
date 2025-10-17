@@ -688,6 +688,62 @@ export default function DesignerPage() {
               </div>
             </dl>
           </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <header className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">PDF layout preview</h2>
+                <p className="text-sm text-slate-500">11×17 in sheet centred on the stack with live artwork alignment.</p>
+              </div>
+              {pdfPreview ? (
+                <a
+                  href={pdfPreview.pdfUrl}
+                  download="flyleaf-mockup.pdf"
+                  className="inline-flex items-center rounded-lg border border-brand px-3 py-2 text-sm font-semibold text-brand transition hover:bg-brand/10"
+                >
+                  Download PDF
+                </a>
+              ) : null}
+            </header>
+
+            <p className="mt-4 text-sm text-slate-600">
+              The preview updates automatically whenever you tweak books, text, or artwork positioning above.
+            </p>
+
+            <div className="mt-4 space-y-4">
+              {pdfPreview ? (
+                pdfPreview.pageImages.length > 0 ? (
+                  <div className="space-y-6">
+                    {pdfPreview.pageImages.map((imageUrl, index) => (
+                      <figure
+                        key={`${imageUrl}-${index}`}
+                        className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={imageUrl} alt={`PDF page ${index + 1}`} className="block w-full" />
+                        <figcaption className="border-t border-slate-200 bg-white px-4 py-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                          Page {index + 1}
+                        </figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-100/70 py-16 text-center text-sm text-slate-500">
+                    PDF preview will appear once at least one spine is defined.
+                  </div>
+                )
+              ) : (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-100/70 py-16 text-center text-sm text-slate-500">
+                  {isGeneratingPdf ? "Generating PDF preview…" : "PDF preview will appear once the artwork is ready."}
+                </div>
+              )}
+              {isGeneratingPdf ? (
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Rendering latest layout…</p>
+              ) : (
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Latest layout ready</p>
+              )}
+            </div>
+          </section>
         </div>
       </section>
     </main>
