@@ -188,8 +188,9 @@ export default function DesignerPage() {
   const [artOffsetMm, setArtOffsetMm] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [artZoom, setArtZoom] = useState<number>(1);
   const [artworkSrc, setArtworkSrc] = useState<string>(DEFAULT_ARTWORK_SRC);
-  const pendingFileReaderRef = useRef<FileReader | null>(null);
-  const [uploadedArtwork, setUploadedArtwork] = useState<{ file: File; dataUrl: string } | null>(null);
+  const uploadedArtworkUrlRef = useRef<string | null>(null);
+  const [uploadedArtwork, setUploadedArtwork] = useState<{ file: File; previewUrl: string } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [hasManualZoom, setHasManualZoom] = useState<boolean>(false);
   const [hasManualOffset, setHasManualOffset] = useState<boolean>(false);
   const [showLargeText, setShowLargeText] = useState<boolean>(false);
@@ -200,6 +201,8 @@ export default function DesignerPage() {
     widthMm: DEFAULT_LAYOUT.metrics.requiredWidthMm,
     heightMm: DEFAULT_LAYOUT.metrics.requiredHeightMm,
   });
+  const pdfPreview: { pdfUrl: string; pageImages: string[] } | null = null;
+  const isGeneratingPdf = false;
   const layout = useMemo(() => computeStackLayout(books), [books]);
   const artworkBounds = useMemo(
     () => computeArtworkBounds(layout.metrics, artworkDimensionsMm),
@@ -216,7 +219,9 @@ export default function DesignerPage() {
 
   useEffect(() => {
     return () => {
-      pendingFileReaderRef.current?.abort();
+      if (uploadedArtworkUrlRef.current) {
+        URL.revokeObjectURL(uploadedArtworkUrlRef.current);
+      }
     };
   }, []);
 
@@ -444,50 +449,41 @@ export default function DesignerPage() {
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Artwork image</span>
                 <input
                   type="file"
-                  accept="image/jpeg"
+                  accept="image/*"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (!file) {
                       return;
                     }
-                    if (file.type !== "image/jpeg" && file.type !== "image/pjpeg") {
+                    if (file.type && !file.type.startsWith("image/")) {
+                      setUploadError("Please choose an image file (PNG, JPG, or similar).");
+                      setUploadedArtwork(null);
+                      event.target.value = "";
                       return;
                     }
 
-                    if (pendingFileReaderRef.current) {
-                      pendingFileReaderRef.current.abort();
+                    setUploadError(null);
+
+                    const nextUrl = URL.createObjectURL(file);
+                    if (uploadedArtworkUrlRef.current) {
+                      URL.revokeObjectURL(uploadedArtworkUrlRef.current);
                     }
+                    uploadedArtworkUrlRef.current = nextUrl;
 
-                    const reader = new FileReader();
-                    pendingFileReaderRef.current = reader;
-
-                    reader.onload = () => {
-                      pendingFileReaderRef.current = null;
-                      const result = reader.result;
-                      if (typeof result !== "string") {
-                        return;
-                      }
-                      setUploadedArtwork({ file, dataUrl: result });
-                      setArtworkSrc(result);
-                      setArtOffsetMm({ x: 0, y: 0 });
-                      setArtZoom(1);
-                      setHasManualOffset(false);
-                      setHasManualZoom(false);
-                    };
-
-                    reader.onerror = () => {
-                      pendingFileReaderRef.current = null;
-                    };
-
-                    reader.readAsDataURL(file);
+                    setUploadedArtwork({ file, previewUrl: nextUrl });
+                    setArtworkSrc(nextUrl);
+                    setArtOffsetMm({ x: 0, y: 0 });
+                    setArtZoom(1);
+                    setHasManualOffset(false);
+                    setHasManualZoom(false);
                     event.target.value = "";
                   }}
                   className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-brand/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand"
                 />
-                <span className="text-xs text-slate-500">
+                <span className={uploadError ? "text-xs font-medium text-rose-600" : "text-xs text-slate-500"}>
                   {uploadedArtwork
                     ? `Using ${uploadedArtwork.file.name} for the live and PDF previews.`
-                    : "Upload a JPEG to replace the default artwork."}
+                    : uploadError ?? "Upload an image to replace the default artwork."}
                 </span>
               </label>
               <label className="flex flex-col gap-1 text-sm">
@@ -621,7 +617,7 @@ export default function DesignerPage() {
                   height: layout.metrics.requiredHeightMm * PREVIEW_SCALE,
                 }}
               >
-                <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-90">
+                <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-90">
                   <div
                     className="absolute left-1/2 top-1/2"
                     style={artWrapperStyle}
@@ -636,13 +632,13 @@ export default function DesignerPage() {
                   </div>
                 </div>
 
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-5xl font-black tracking-[1em] text-slate-800/10">
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-5xl font-black tracking-[1em] text-slate-800/10">
                   SAMPLE
                 </div>
 
                 {showLargeText && largeText.trim().length > 0 ? (
                   <div
-                    className="pointer-events-none absolute flex items-center justify-center text-center text-white drop-shadow-[0_1px_6px_rgba(15,23,42,0.35)]"
+                    className="pointer-events-none absolute z-20 flex items-center justify-center text-center text-white drop-shadow-[0_1px_6px_rgba(15,23,42,0.35)]"
                     style={largeTextWrapperStyle}
                   >
                     <span className="w-[92%] whitespace-pre-wrap break-words text-slate-50" style={{ lineHeight: 1.1 }}>
@@ -654,7 +650,7 @@ export default function DesignerPage() {
                 {layout.rects.map((rect) => (
                   <div
                     key={rect.id}
-                    className="absolute rounded-md border shadow-sm"
+                    className="absolute z-30 rounded-md border shadow-sm"
                     style={{
                       width: rect.widthMm * PREVIEW_SCALE,
                       height: rect.heightMm * PREVIEW_SCALE,
