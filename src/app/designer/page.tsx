@@ -444,13 +444,13 @@ export default function DesignerPage() {
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Artwork image</span>
                 <input
                   type="file"
-                  accept="image/jpeg"
+                  accept="image/*"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (!file) {
                       return;
                     }
-                    if (file.type !== "image/jpeg" && file.type !== "image/pjpeg") {
+                    if (file.type && !file.type.startsWith("image/")) {
                       return;
                     }
 
@@ -487,7 +487,7 @@ export default function DesignerPage() {
                 <span className="text-xs text-slate-500">
                   {uploadedArtwork
                     ? `Using ${uploadedArtwork.file.name} for the live and PDF previews.`
-                    : "Upload a JPEG to replace the default artwork."}
+                    : "Upload an image to replace the default artwork."}
                 </span>
               </label>
               <label className="flex flex-col gap-1 text-sm">
@@ -621,7 +621,7 @@ export default function DesignerPage() {
                   height: layout.metrics.requiredHeightMm * PREVIEW_SCALE,
                 }}
               >
-                <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-90">
+                <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-90">
                   <div
                     className="absolute left-1/2 top-1/2"
                     style={artWrapperStyle}
@@ -636,13 +636,13 @@ export default function DesignerPage() {
                   </div>
                 </div>
 
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-5xl font-black tracking-[1em] text-slate-800/10">
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-5xl font-black tracking-[1em] text-slate-800/10">
                   SAMPLE
                 </div>
 
                 {showLargeText && largeText.trim().length > 0 ? (
                   <div
-                    className="pointer-events-none absolute flex items-center justify-center text-center text-white drop-shadow-[0_1px_6px_rgba(15,23,42,0.35)]"
+                    className="pointer-events-none absolute z-20 flex items-center justify-center text-center text-white drop-shadow-[0_1px_6px_rgba(15,23,42,0.35)]"
                     style={largeTextWrapperStyle}
                   >
                     <span className="w-[92%] whitespace-pre-wrap break-words text-slate-50" style={{ lineHeight: 1.1 }}>
@@ -654,7 +654,7 @@ export default function DesignerPage() {
                 {layout.rects.map((rect) => (
                   <div
                     key={rect.id}
-                    className="absolute rounded-md border shadow-sm"
+                    className="absolute z-30 rounded-md border shadow-sm"
                     style={{
                       width: rect.widthMm * PREVIEW_SCALE,
                       height: rect.heightMm * PREVIEW_SCALE,
