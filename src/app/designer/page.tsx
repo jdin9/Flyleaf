@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type BookFormState = {
   id: number;
@@ -188,7 +188,7 @@ export default function DesignerPage() {
   const [artOffsetMm, setArtOffsetMm] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [artZoom, setArtZoom] = useState<number>(1);
   const [artworkSrc, setArtworkSrc] = useState<string>(DEFAULT_ARTWORK_SRC);
-  const [uploadedArtworkSrc, setUploadedArtworkSrc] = useState<string | null>(null);
+  const uploadedArtworkRef = useRef<string | null>(null);
   const [hasManualZoom, setHasManualZoom] = useState<boolean>(false);
   const [hasManualOffset, setHasManualOffset] = useState<boolean>(false);
   const [showLargeText, setShowLargeText] = useState<boolean>(false);
@@ -215,11 +215,11 @@ export default function DesignerPage() {
 
   useEffect(() => {
     return () => {
-      if (uploadedArtworkSrc) {
-        URL.revokeObjectURL(uploadedArtworkSrc);
+      if (uploadedArtworkRef.current) {
+        URL.revokeObjectURL(uploadedArtworkRef.current);
       }
     };
-  }, [uploadedArtworkSrc]);
+  }, []);
 
   useEffect(() => {
     let isCancelled = false;
@@ -454,18 +454,17 @@ export default function DesignerPage() {
                     if (file.type !== "image/jpeg" && file.type !== "image/pjpeg") {
                       return;
                     }
+                    if (uploadedArtworkRef.current) {
+                      URL.revokeObjectURL(uploadedArtworkRef.current);
+                    }
                     const objectUrl = URL.createObjectURL(file);
+                    uploadedArtworkRef.current = objectUrl;
                     setArtworkSrc(objectUrl);
-                    setUploadedArtworkSrc((previous) => {
-                      if (previous) {
-                        URL.revokeObjectURL(previous);
-                      }
-                      return objectUrl;
-                    });
                     setArtOffsetMm({ x: 0, y: 0 });
                     setArtZoom(1);
                     setHasManualOffset(false);
                     setHasManualZoom(false);
+                    event.target.value = "";
                   }}
                   className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-brand/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand"
                 />
