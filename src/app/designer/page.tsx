@@ -1,7 +1,6 @@
 "use client";
 
-import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type BookFormState = {
   id: number;
@@ -24,6 +23,7 @@ type BookRect = {
 type StackMetrics = {
   totalWidthMm: number;
   maxHeightMm: number;
+  minHeightMm: number;
   requiredWidthMm: number;
   requiredHeightMm: number;
   collectionWidthCm: number;
@@ -37,12 +37,15 @@ type StackLayout = {
 
 const CM_TO_MM = 10;
 const GAP_MM = 2;
-const CLEARANCE_SIDE_MM = 20;
+const CLEARANCE_SIDE_MM = 10;
 const CLEARANCE_TOP_MM = 2;
 const CLEARANCE_BOTTOM_MM = 2;
+const ART_SAFE_MARGIN_SIDE_MM = 10;
+const ART_SAFE_MARGIN_VERTICAL_MM = 2;
 const TABLOID_WIDTH_MM = 17 * 25.4;
 const TABLOID_HEIGHT_MM = 11 * 25.4;
-const PREVIEW_SCALE = 2.4; // pixels per millimetre for the preview canvas.
+const PREVIEW_SCALE = 2; // pixels per millimetre for the preview canvas.
+const DEFAULT_ARTWORK_SRC = "/desert-sunrise-plateau.svg";
 
 const DEFAULT_BOOKS: BookFormState[] = [
   { id: 1, label: "Book 1", heightCm: 23.5, spineWidthCm: 4.25, color: "#2563eb" },
@@ -50,6 +53,14 @@ const DEFAULT_BOOKS: BookFormState[] = [
   { id: 3, label: "Book 3", heightCm: 23.5, spineWidthCm: 4.75, color: "#f97316" },
   { id: 4, label: "Book 4", heightCm: 23.5, spineWidthCm: 2.25, color: "#6366f1" },
 ];
+
+const FONT_OPTIONS = [
+  { label: "Inter", value: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
+  { label: "Playfair Display", value: "'Playfair Display', 'Times New Roman', serif" },
+  { label: "Crimson Text", value: "'Crimson Text', Georgia, serif" },
+  { label: "Montserrat", value: "'Montserrat', 'Helvetica Neue', sans-serif" },
+  { label: "Libre Baskerville", value: "'Libre Baskerville', 'Times New Roman', serif" },
+] as const;
 
 /**
  * Converts a numeric value in centimetres to millimetres so geometry rules can share a consistent unit.
@@ -65,6 +76,7 @@ function computeStackLayout(books: BookFormState[]): StackLayout {
   const heightsMm = books.map((book) => cmToMm(book.heightCm));
   const widthsMm = books.map((book) => cmToMm(book.spineWidthCm));
   const maxHeightMm = heightsMm.length ? Math.max(...heightsMm) : 0;
+  const minHeightMm = heightsMm.length ? Math.min(...heightsMm) : 0;
   const totalWidthMm = widthsMm.reduce((acc, width, index) => {
     const gap = index === 0 ? 0 : GAP_MM;
     return acc + width + gap;
@@ -100,6 +112,7 @@ function computeStackLayout(books: BookFormState[]): StackLayout {
     metrics: {
       totalWidthMm,
       maxHeightMm,
+      minHeightMm,
       requiredWidthMm,
       requiredHeightMm,
       collectionWidthCm: totalWidthMm / CM_TO_MM,
@@ -108,6 +121,8 @@ function computeStackLayout(books: BookFormState[]): StackLayout {
     rects,
   };
 }
+
+const DEFAULT_LAYOUT = computeStackLayout(DEFAULT_BOOKS);
 
 function formatMillimetres(valueMm: number): string {
   return `${(valueMm / CM_TO_MM).toFixed(1)} cm`;
@@ -119,12 +134,142 @@ function formatClearanceSummary(metrics: StackMetrics): string {
   return `${widthCm} cm × ${heightCm} cm required including clearances`;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+type ArtworkDimensionsMm = {
+  widthMm: number;
+  heightMm: number;
+};
+
+function computeArtworkBounds(metrics: StackMetrics, artworkDimensions: ArtworkDimensionsMm) {
+  const safeWidthMm = metrics.totalWidthMm + ART_SAFE_MARGIN_SIDE_MM * 2;
+  const safeHeightMm = metrics.maxHeightMm + ART_SAFE_MARGIN_VERTICAL_MM * 2;
+  const fallbackWidthMm = metrics.requiredWidthMm || safeWidthMm;
+  const fallbackHeightMm = metrics.requiredHeightMm || safeHeightMm;
+  const baseWidthMm = artworkDimensions.widthMm || fallbackWidthMm;
+  const baseHeightMm = artworkDimensions.heightMm || fallbackHeightMm;
+  const minZoomRaw = Math.max(safeWidthMm / baseWidthMm, safeHeightMm / baseHeightMm);
+  const minZoom = Number.isFinite(minZoomRaw) && minZoomRaw > 0 ? minZoomRaw : 1;
+
+  return {
+    safeWidthMm,
+    safeHeightMm,
+    containerWidthMm: metrics.requiredWidthMm,
+    containerHeightMm: metrics.requiredHeightMm,
+    minZoom,
+  } as const;
+}
+
+function computeOffsetLimits(
+  bounds: ReturnType<typeof computeArtworkBounds>,
+  artworkDimensions: ArtworkDimensionsMm,
+  zoom: number,
+) {
+  const baseWidthMm = artworkDimensions.widthMm || bounds.safeWidthMm;
+  const baseHeightMm = artworkDimensions.heightMm || bounds.safeHeightMm;
+  const artWidthMm = baseWidthMm * zoom;
+  const artHeightMm = baseHeightMm * zoom;
+  const horizontalRoomMm = Math.max((artWidthMm - bounds.safeWidthMm) / 2, 0);
+  const verticalRoomMm = Math.max((artHeightMm - bounds.safeHeightMm) / 2, 0);
+
+  return {
+    minX: -horizontalRoomMm,
+    maxX: horizontalRoomMm,
+    minY: -verticalRoomMm,
+    maxY: verticalRoomMm,
+  } as const;
+}
+
 export default function DesignerPage() {
   const [books, setBooks] = useState<BookFormState[]>(DEFAULT_BOOKS);
   const [nextId, setNextId] = useState<number>(DEFAULT_BOOKS.length + 1);
   const [artOffsetMm, setArtOffsetMm] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [artZoom, setArtZoom] = useState<number>(1);
+  const [artworkSrc, setArtworkSrc] = useState<string>(DEFAULT_ARTWORK_SRC);
+  const [uploadedArtworkSrc, setUploadedArtworkSrc] = useState<string | null>(null);
+  const [hasManualZoom, setHasManualZoom] = useState<boolean>(false);
+  const [hasManualOffset, setHasManualOffset] = useState<boolean>(false);
+  const [showLargeText, setShowLargeText] = useState<boolean>(false);
+  const [largeText, setLargeText] = useState<string>("Collection Title");
+  const [largeTextFont, setLargeTextFont] = useState<string>(FONT_OPTIONS[0]?.value ?? "sans-serif");
+  const [largeTextSizePx, setLargeTextSizePx] = useState<number>(72);
+  const [artworkDimensionsMm, setArtworkDimensionsMm] = useState<ArtworkDimensionsMm>({
+    widthMm: DEFAULT_LAYOUT.metrics.requiredWidthMm,
+    heightMm: DEFAULT_LAYOUT.metrics.requiredHeightMm,
+  });
   const layout = useMemo(() => computeStackLayout(books), [books]);
+  const artworkBounds = useMemo(
+    () => computeArtworkBounds(layout.metrics, artworkDimensionsMm),
+    [layout.metrics, artworkDimensionsMm],
+  );
+  const offsetLimits = useMemo(
+    () => computeOffsetLimits(artworkBounds, artworkDimensionsMm, artZoom),
+    [artworkBounds, artworkDimensionsMm, artZoom],
+  );
+  const maxLargeTextSizePx = useMemo(() => {
+    const availableHeightPx = layout.metrics.minHeightMm * PREVIEW_SCALE;
+    return availableHeightPx > 0 ? Math.max(24, availableHeightPx * 0.8) : 72;
+  }, [layout.metrics.minHeightMm]);
+
+  useEffect(() => {
+    return () => {
+      if (uploadedArtworkSrc) {
+        URL.revokeObjectURL(uploadedArtworkSrc);
+      }
+    };
+  }, [uploadedArtworkSrc]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => {
+      if (isCancelled) {
+        return;
+      }
+      const width = image.naturalWidth || DEFAULT_LAYOUT.metrics.requiredWidthMm * PREVIEW_SCALE;
+      const height = image.naturalHeight || DEFAULT_LAYOUT.metrics.requiredHeightMm * PREVIEW_SCALE;
+      setArtworkDimensionsMm({
+        widthMm: width / PREVIEW_SCALE,
+        heightMm: height / PREVIEW_SCALE,
+      });
+    };
+    image.src = artworkSrc;
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [artworkSrc]);
+
+  useEffect(() => {
+    setArtZoom((current) => {
+      const desiredZoom = hasManualZoom && current >= artworkBounds.minZoom ? current : artworkBounds.minZoom;
+      return current === desiredZoom ? current : desiredZoom;
+    });
+  }, [artworkBounds.minZoom, hasManualZoom]);
+
+  useEffect(() => {
+    setArtOffsetMm((current) => {
+      const clamped = {
+        x: clamp(current.x, offsetLimits.minX, offsetLimits.maxX),
+        y: clamp(current.y, offsetLimits.minY, offsetLimits.maxY),
+      } as const;
+      if (hasManualOffset) {
+        return clamped;
+      }
+      const centered = {
+        x: clamp(0, offsetLimits.minX, offsetLimits.maxX),
+        y: clamp(0, offsetLimits.minY, offsetLimits.maxY),
+      } as const;
+      return clamped.x === centered.x && clamped.y === centered.y ? clamped : centered;
+    });
+  }, [offsetLimits, hasManualOffset]);
+
+  useEffect(() => {
+    setLargeTextSizePx((current) => clamp(current, 24, maxLargeTextSizePx));
+  }, [maxLargeTextSizePx]);
 
   const handleUpdateBook = (id: number, key: keyof BookFormState, value: string) => {
     setBooks((current) =>
@@ -157,10 +302,30 @@ export default function DesignerPage() {
     setBooks((current) => (current.length > 1 ? current.filter((book) => book.id !== id) : current));
   };
 
-  const artTransform = {
-    transform: `translate(${artOffsetMm.x * PREVIEW_SCALE}px, ${artOffsetMm.y * PREVIEW_SCALE}px) scale(${artZoom})`,
+  const artWrapperStyle = {
+    transform: `translate(-50%, -50%) translate(${artOffsetMm.x * PREVIEW_SCALE}px, ${artOffsetMm.y * PREVIEW_SCALE}px)`,
+  } as const;
+
+  const artImageStyle = {
+    width: artworkDimensionsMm.widthMm * PREVIEW_SCALE,
+    height: artworkDimensionsMm.heightMm * PREVIEW_SCALE,
+    transform: `translate(-50%, -50%) scale(${artZoom})`,
     transformOrigin: "center",
   } as const;
+
+  const largeTextWrapperStyle = useMemo(() => {
+    const availableWidthPx = layout.metrics.totalWidthMm * PREVIEW_SCALE;
+    const topOffsetMm = CLEARANCE_TOP_MM + (layout.metrics.maxHeightMm - layout.metrics.minHeightMm) / 2;
+    const topPx = topOffsetMm * PREVIEW_SCALE;
+    return {
+      left: CLEARANCE_SIDE_MM * PREVIEW_SCALE,
+      top: topPx,
+      width: availableWidthPx,
+      height: layout.metrics.minHeightMm * PREVIEW_SCALE,
+      fontFamily: largeTextFont,
+      fontSize: `${largeTextSizePx}px`,
+    } as const;
+  }, [largeTextFont, largeTextSizePx, layout.metrics.maxHeightMm, layout.metrics.minHeightMm, layout.metrics.totalWidthMm]);
 
   return (
     <main className="flex min-h-screen flex-col gap-12 bg-slate-50 px-6 pb-20 pt-16">
@@ -254,7 +419,7 @@ export default function DesignerPage() {
               <span className="font-semibold text-slate-900">Collection width:</span> {layout.metrics.collectionWidthCm.toFixed(2)} cm
             </p>
             <p className="mt-1">Gap between books: 2 mm (fixed)</p>
-            <p className="mt-1">Top clearance: 2 mm • Bottom clearance: 2 mm • Side clearance: 20 mm</p>
+            <p className="mt-1">Top clearance: 2 mm • Bottom clearance: 2 mm • Side clearance: 10 mm</p>
           </div>
         </aside>
 
@@ -276,41 +441,149 @@ export default function DesignerPage() {
             </header>
 
             <div className="mt-6 grid gap-5 md:grid-cols-3">
+              <label className="flex flex-col gap-1 text-sm md:col-span-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Artwork image</span>
+                <input
+                  type="file"
+                  accept="image/jpeg"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) {
+                      return;
+                    }
+                    if (file.type !== "image/jpeg" && file.type !== "image/pjpeg") {
+                      return;
+                    }
+                    const objectUrl = URL.createObjectURL(file);
+                    setArtworkSrc(objectUrl);
+                    setUploadedArtworkSrc((previous) => {
+                      if (previous) {
+                        URL.revokeObjectURL(previous);
+                      }
+                      return objectUrl;
+                    });
+                    setArtOffsetMm({ x: 0, y: 0 });
+                    setArtZoom(1);
+                    setHasManualOffset(false);
+                    setHasManualZoom(false);
+                  }}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-brand/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand"
+                />
+                <span className="text-xs text-slate-500">Upload a JPEG to replace the default artwork.</span>
+              </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Horizontal offset (mm)</span>
                 <input
                   type="range"
-                  min={-40}
-                  max={40}
-                  step={1}
+                  min={offsetLimits.minX}
+                  max={offsetLimits.maxX}
+                  step={0.5}
                   value={artOffsetMm.x}
-                  onChange={(event) => setArtOffsetMm((prev) => ({ ...prev, x: Number(event.target.value) }))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setArtOffsetMm((prev) => ({
+                      ...prev,
+                      x: clamp(value, offsetLimits.minX, offsetLimits.maxX),
+                    }));
+                    setHasManualOffset(true);
+                  }}
                 />
-                <span className="text-xs text-slate-500">{artOffsetMm.x} mm</span>
+                <span className="text-xs text-slate-500">{artOffsetMm.x.toFixed(1)} mm</span>
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vertical offset (mm)</span>
                 <input
                   type="range"
-                  min={-40}
-                  max={40}
-                  step={1}
+                  min={offsetLimits.minY}
+                  max={offsetLimits.maxY}
+                  step={0.5}
                   value={artOffsetMm.y}
-                  onChange={(event) => setArtOffsetMm((prev) => ({ ...prev, y: Number(event.target.value) }))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setArtOffsetMm((prev) => ({
+                      ...prev,
+                      y: clamp(value, offsetLimits.minY, offsetLimits.maxY),
+                    }));
+                    setHasManualOffset(true);
+                  }}
                 />
-                <span className="text-xs text-slate-500">{artOffsetMm.y} mm</span>
+                <span className="text-xs text-slate-500">{artOffsetMm.y.toFixed(1)} mm</span>
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Zoom</span>
                 <input
                   type="range"
-                  min={0.85}
+                  min={artworkBounds.minZoom}
                   max={1.25}
                   step={0.01}
                   value={artZoom}
-                  onChange={(event) => setArtZoom(Number(event.target.value))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setHasManualZoom(true);
+                    setArtZoom(value < artworkBounds.minZoom ? artworkBounds.minZoom : value);
+                  }}
                 />
                 <span className="text-xs text-slate-500">{(artZoom * 100).toFixed(0)}%</span>
+              </label>
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <header className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Large spine text</h2>
+                <p className="text-sm text-slate-500">Overlay a title across the full stack without leaving the spine bounds.</p>
+              </div>
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={showLargeText}
+                  onChange={(event) => setShowLargeText(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                />
+                Enable large text
+              </label>
+            </header>
+
+            <div className="mt-6 grid gap-5 md:grid-cols-3">
+              <label className="md:col-span-3 flex flex-col gap-1 text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Text</span>
+                <textarea
+                  value={largeText}
+                  onChange={(event) => setLargeText(event.target.value)}
+                  placeholder="Enter collection title"
+                  rows={3}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                  disabled={!showLargeText}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Font family</span>
+                <select
+                  value={largeTextFont}
+                  onChange={(event) => setLargeTextFont(event.target.value)}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                  disabled={!showLargeText}
+                >
+                  {FONT_OPTIONS.map((option) => (
+                    <option key={option.label} value={option.value} style={{ fontFamily: option.value }}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Font size (px)</span>
+                <input
+                  type="range"
+                  min={24}
+                  max={maxLargeTextSizePx}
+                  step={1}
+                  value={largeTextSizePx}
+                  onChange={(event) => setLargeTextSizePx(Number(event.target.value))}
+                  disabled={!showLargeText}
+                />
+                <span className="text-xs text-slate-500">{Math.round(largeTextSizePx)} px</span>
               </label>
             </div>
           </section>
@@ -329,40 +602,35 @@ export default function DesignerPage() {
                   height: layout.metrics.requiredHeightMm * PREVIEW_SCALE,
                 }}
               >
-                <div
-                  className="pointer-events-none absolute inset-0 overflow-hidden"
-                  style={artTransform}
-                >
-                  <Image
-                    src="/desert-sunrise-plateau.svg"
-                    alt="Warm desert landscape artwork behind the spines"
-                    fill
-                    priority
-                    className="object-cover opacity-90"
-                    sizes="(min-width: 1024px) 640px, 90vw"
-                  />
+                <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-90">
+                  <div
+                    className="absolute left-1/2 top-1/2"
+                    style={artWrapperStyle}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={artworkSrc}
+                      alt="Uploaded artwork background"
+                      className="pointer-events-none absolute left-1/2 top-1/2 select-none"
+                      style={artImageStyle}
+                    />
+                  </div>
                 </div>
-
-                <div
-                  className="pointer-events-none absolute h-0 border-t-2 border-green-400"
-                  style={{
-                    left: CLEARANCE_SIDE_MM * PREVIEW_SCALE,
-                    right: CLEARANCE_SIDE_MM * PREVIEW_SCALE,
-                    top: CLEARANCE_TOP_MM * PREVIEW_SCALE,
-                  }}
-                />
-                <div
-                  className="pointer-events-none absolute h-0 border-t-2 border-green-400"
-                  style={{
-                    left: CLEARANCE_SIDE_MM * PREVIEW_SCALE,
-                    right: CLEARANCE_SIDE_MM * PREVIEW_SCALE,
-                    top: (CLEARANCE_TOP_MM + layout.metrics.maxHeightMm) * PREVIEW_SCALE,
-                  }}
-                />
 
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-5xl font-black tracking-[1em] text-slate-800/10">
                   SAMPLE
                 </div>
+
+                {showLargeText && largeText.trim().length > 0 ? (
+                  <div
+                    className="pointer-events-none absolute flex items-center justify-center text-center text-white drop-shadow-[0_1px_6px_rgba(15,23,42,0.35)]"
+                    style={largeTextWrapperStyle}
+                  >
+                    <span className="w-[92%] whitespace-pre-wrap break-words text-slate-50" style={{ lineHeight: 1.1 }}>
+                      {largeText}
+                    </span>
+                  </div>
+                ) : null}
 
                 {layout.rects.map((rect) => (
                   <div
