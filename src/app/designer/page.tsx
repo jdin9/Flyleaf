@@ -188,8 +188,8 @@ export default function DesignerPage() {
   const [artOffsetMm, setArtOffsetMm] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [artZoom, setArtZoom] = useState<number>(1);
   const [artworkSrc, setArtworkSrc] = useState<string>(DEFAULT_ARTWORK_SRC);
-  const uploadedArtworkUrlRef = useRef<string | null>(null);
-  const [uploadedArtwork, setUploadedArtwork] = useState<{ file: File; previewUrl: string } | null>(null);
+  const pendingFileReaderRef = useRef<FileReader | null>(null);
+  const [uploadedArtwork, setUploadedArtwork] = useState<{ file: File; dataUrl: string } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [hasManualZoom, setHasManualZoom] = useState<boolean>(false);
   const [hasManualOffset, setHasManualOffset] = useState<boolean>(false);
@@ -219,9 +219,7 @@ export default function DesignerPage() {
 
   useEffect(() => {
     return () => {
-      if (uploadedArtworkUrlRef.current) {
-        URL.revokeObjectURL(uploadedArtworkUrlRef.current);
-      }
+      pendingFileReaderRef.current?.abort();
     };
   }, []);
 
@@ -464,26 +462,44 @@ export default function DesignerPage() {
 
                     setUploadError(null);
 
-                    const nextUrl = URL.createObjectURL(file);
-                    if (uploadedArtworkUrlRef.current) {
-                      URL.revokeObjectURL(uploadedArtworkUrlRef.current);
+                    if (pendingFileReaderRef.current) {
+                      pendingFileReaderRef.current.abort();
                     }
-                    uploadedArtworkUrlRef.current = nextUrl;
 
-                    setUploadedArtwork({ file, previewUrl: nextUrl });
-                    setArtworkSrc(nextUrl);
-                    setArtOffsetMm({ x: 0, y: 0 });
-                    setArtZoom(1);
-                    setHasManualOffset(false);
-                    setHasManualZoom(false);
+                    const reader = new FileReader();
+                    pendingFileReaderRef.current = reader;
+
+                    reader.onload = () => {
+                      pendingFileReaderRef.current = null;
+                      const result = reader.result;
+                      if (typeof result !== "string") {
+                        setUploadError("We couldn't read that image. Please try another file.");
+                        return;
+                      }
+                      setUploadedArtwork({ file, dataUrl: result });
+                      setArtworkSrc(result);
+                      setArtOffsetMm({ x: 0, y: 0 });
+                      setArtZoom(1);
+                      setHasManualOffset(false);
+                      setHasManualZoom(false);
+                    };
+
+                    reader.onerror = () => {
+                      pendingFileReaderRef.current = null;
+                      setUploadError("We couldn't read that image. Please try another file.");
+                    };
+
+                    reader.readAsDataURL(file);
                     event.target.value = "";
                   }}
                   className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-brand/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand"
                 />
                 <span className={uploadError ? "text-xs font-medium text-rose-600" : "text-xs text-slate-500"}>
-                  {uploadedArtwork
-                    ? `Using ${uploadedArtwork.file.name} for the live and PDF previews.`
-                    : uploadError ?? "Upload an image to replace the default artwork."}
+                  {uploadError
+                    ? uploadError
+                    : uploadedArtwork
+                      ? `Using ${uploadedArtwork.file.name} for the live and PDF previews.`
+                      : "Upload an image to replace the default artwork."}
                 </span>
               </label>
               <label className="flex flex-col gap-1 text-sm">
