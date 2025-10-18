@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
 type BookFormState = {
   id: number;
@@ -187,10 +188,6 @@ export default function DesignerPage() {
   const [nextId, setNextId] = useState<number>(DEFAULT_BOOKS.length + 1);
   const [artOffsetMm, setArtOffsetMm] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [artZoom, setArtZoom] = useState<number>(1);
-  const [artworkSrc, setArtworkSrc] = useState<string>(DEFAULT_ARTWORK_SRC);
-  const pendingFileReaderRef = useRef<FileReader | null>(null);
-  const [uploadedArtwork, setUploadedArtwork] = useState<{ file: File; dataUrl: string } | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
   const [hasManualZoom, setHasManualZoom] = useState<boolean>(false);
   const [hasManualOffset, setHasManualOffset] = useState<boolean>(false);
   const [showLargeText, setShowLargeText] = useState<boolean>(false);
@@ -218,12 +215,6 @@ export default function DesignerPage() {
   }, [layout.metrics.minHeightMm]);
 
   useEffect(() => {
-    return () => {
-      pendingFileReaderRef.current?.abort();
-    };
-  }, []);
-
-  useEffect(() => {
     let isCancelled = false;
     const image = new Image();
     image.decoding = "async";
@@ -238,12 +229,12 @@ export default function DesignerPage() {
         heightMm: height / PREVIEW_SCALE,
       });
     };
-    image.src = artworkSrc;
+    image.src = DEFAULT_ARTWORK_SRC;
 
     return () => {
       isCancelled = true;
     };
-  }, [artworkSrc]);
+  }, []);
 
   useEffect(() => {
     setArtZoom((current) => {
@@ -308,12 +299,11 @@ export default function DesignerPage() {
     transform: `translate(-50%, -50%) translate(${artOffsetMm.x * PREVIEW_SCALE}px, ${artOffsetMm.y * PREVIEW_SCALE}px)`,
   } as const;
 
-  const artImageStyle = {
-    width: artworkDimensionsMm.widthMm * PREVIEW_SCALE,
-    height: artworkDimensionsMm.heightMm * PREVIEW_SCALE,
+  const artImageStyle: CSSProperties = {
     transform: `translate(-50%, -50%) scale(${artZoom})`,
     transformOrigin: "center",
-  } as const;
+    objectFit: "cover",
+  };
 
   const largeTextWrapperStyle = useMemo(() => {
     const availableWidthPx = layout.metrics.totalWidthMm * PREVIEW_SCALE;
@@ -443,65 +433,9 @@ export default function DesignerPage() {
             </header>
 
             <div className="mt-6 grid gap-5 md:grid-cols-3">
-              <label className="flex flex-col gap-1 text-sm md:col-span-3">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Artwork image</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) {
-                      return;
-                    }
-                    if (file.type && !file.type.startsWith("image/")) {
-                      setUploadError("Please choose an image file (PNG, JPG, or similar).");
-                      setUploadedArtwork(null);
-                      event.target.value = "";
-                      return;
-                    }
-
-                    setUploadError(null);
-
-                    if (pendingFileReaderRef.current) {
-                      pendingFileReaderRef.current.abort();
-                    }
-
-                    const reader = new FileReader();
-                    pendingFileReaderRef.current = reader;
-
-                    reader.onload = () => {
-                      pendingFileReaderRef.current = null;
-                      const result = reader.result;
-                      if (typeof result !== "string") {
-                        setUploadError("We couldn't read that image. Please try another file.");
-                        return;
-                      }
-                      setUploadedArtwork({ file, dataUrl: result });
-                      setArtworkSrc(result);
-                      setArtOffsetMm({ x: 0, y: 0 });
-                      setArtZoom(1);
-                      setHasManualOffset(false);
-                      setHasManualZoom(false);
-                    };
-
-                    reader.onerror = () => {
-                      pendingFileReaderRef.current = null;
-                      setUploadError("We couldn't read that image. Please try another file.");
-                    };
-
-                    reader.readAsDataURL(file);
-                    event.target.value = "";
-                  }}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-brand/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand"
-                />
-                <span className={uploadError ? "text-xs font-medium text-rose-600" : "text-xs text-slate-500"}>
-                  {uploadError
-                    ? uploadError
-                    : uploadedArtwork
-                      ? `Using ${uploadedArtwork.file.name} for the live and PDF previews.`
-                      : "Upload an image to replace the default artwork."}
-                </span>
-              </label>
+              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-100/60 px-4 py-3 text-xs text-slate-600 md:col-span-3">
+                Artwork preview now uses the built-in desert sunrise illustration by default. Positioning controls below still adjust how the fixed image aligns with the spine stack.
+              </div>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Horizontal offset (mm)</span>
                 <input
@@ -638,12 +572,15 @@ export default function DesignerPage() {
                     className="absolute left-1/2 top-1/2"
                     style={artWrapperStyle}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={artworkSrc}
-                      alt="Uploaded artwork background"
+                    <Image
+                      src={DEFAULT_ARTWORK_SRC}
+                      alt="Desert sunrise artwork background"
+                      width={Math.max(1, Math.round(artworkDimensionsMm.widthMm * PREVIEW_SCALE))}
+                      height={Math.max(1, Math.round(artworkDimensionsMm.heightMm * PREVIEW_SCALE))}
                       className="pointer-events-none absolute left-1/2 top-1/2 select-none"
                       style={artImageStyle}
+                      priority
+                      draggable={false}
                     />
                   </div>
                 </div>
