@@ -189,6 +189,7 @@ export default function DesignerPage() {
   const [artZoom, setArtZoom] = useState<number>(1);
   const [artworkSrc, setArtworkSrc] = useState<string>(DEFAULT_ARTWORK_SRC);
   const pendingFileReaderRef = useRef<FileReader | null>(null);
+  const artworkObjectUrlRef = useRef<string | null>(null);
   const [uploadedArtwork, setUploadedArtwork] = useState<{ file: File; dataUrl: string } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [hasManualZoom, setHasManualZoom] = useState<boolean>(false);
@@ -201,7 +202,18 @@ export default function DesignerPage() {
     widthMm: DEFAULT_LAYOUT.metrics.requiredWidthMm,
     heightMm: DEFAULT_LAYOUT.metrics.requiredHeightMm,
   });
-  const pdfPreview: { pdfUrl: string; pageImages: string[] } | null = null;
+  const pdfPreview = useMemo<{ pdfUrl: string | null; pageImages: string[] } | null>(() => {
+    if (!artworkSrc) {
+      return null;
+    }
+
+    const previewSource = uploadedArtwork?.dataUrl ?? artworkSrc;
+
+    return {
+      pdfUrl: uploadedArtwork?.dataUrl ?? null,
+      pageImages: [previewSource],
+    };
+  }, [artworkSrc, uploadedArtwork]);
   const isGeneratingPdf = false;
   const layout = useMemo(() => computeStackLayout(books), [books]);
   const artworkBounds = useMemo(
@@ -220,6 +232,10 @@ export default function DesignerPage() {
   useEffect(() => {
     return () => {
       pendingFileReaderRef.current?.abort();
+      if (artworkObjectUrlRef.current) {
+        URL.revokeObjectURL(artworkObjectUrlRef.current);
+        artworkObjectUrlRef.current = null;
+      }
     };
   }, []);
 
@@ -461,6 +477,14 @@ export default function DesignerPage() {
 
                     setUploadError(null);
 
+                    const previousArtwork = uploadedArtwork;
+                    const previousPreviewUrl = artworkObjectUrlRef.current;
+                    const previousArtworkSrc = artworkSrc;
+                    const nextPreviewUrl = URL.createObjectURL(file);
+
+                    artworkObjectUrlRef.current = nextPreviewUrl;
+                    setArtworkSrc(nextPreviewUrl);
+
                     if (pendingFileReaderRef.current) {
                       pendingFileReaderRef.current.abort();
                     }
@@ -473,19 +497,37 @@ export default function DesignerPage() {
                       const result = reader.result;
                       if (typeof result !== "string") {
                         setUploadError("We couldn't read that image. Please try another file.");
+                        setUploadedArtwork(previousArtwork ?? null);
+                        setArtworkSrc(previousArtworkSrc);
+                        artworkObjectUrlRef.current = previousPreviewUrl ?? null;
+                        URL.revokeObjectURL(nextPreviewUrl);
                         return;
                       }
+
+                      if (previousPreviewUrl && previousPreviewUrl !== nextPreviewUrl) {
+                        URL.revokeObjectURL(previousPreviewUrl);
+                      }
+
                       setUploadedArtwork({ file, dataUrl: result });
-                      setArtworkSrc(result);
                       setArtOffsetMm({ x: 0, y: 0 });
                       setArtZoom(1);
                       setHasManualOffset(false);
                       setHasManualZoom(false);
+                      setArtworkSrc(result);
+
+                      if (artworkObjectUrlRef.current === nextPreviewUrl) {
+                        artworkObjectUrlRef.current = null;
+                      }
+                      URL.revokeObjectURL(nextPreviewUrl);
                     };
 
                     reader.onerror = () => {
                       pendingFileReaderRef.current = null;
                       setUploadError("We couldn't read that image. Please try another file.");
+                      setUploadedArtwork(previousArtwork ?? null);
+                      setArtworkSrc(previousArtworkSrc);
+                      artworkObjectUrlRef.current = previousPreviewUrl ?? null;
+                      URL.revokeObjectURL(nextPreviewUrl);
                     };
 
                     reader.readAsDataURL(file);
@@ -705,7 +747,7 @@ export default function DesignerPage() {
                 <h2 className="text-xl font-semibold text-slate-900">PDF layout preview</h2>
                 <p className="text-sm text-slate-500">11×17 in sheet centred on the stack with live artwork alignment.</p>
               </div>
-              {pdfPreview ? (
+              {pdfPreview?.pdfUrl ? (
                 <a
                   href={pdfPreview.pdfUrl}
                   download="flyleaf-mockup.pdf"
