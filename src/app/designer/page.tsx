@@ -188,10 +188,9 @@ export default function DesignerPage() {
   const [artOffsetMm, setArtOffsetMm] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [artZoom, setArtZoom] = useState<number>(1);
   const [artworkSrc, setArtworkSrc] = useState<string>(DEFAULT_ARTWORK_SRC);
-  const pendingFileReaderRef = useRef<FileReader | null>(null);
   const artworkObjectUrlRef = useRef<string | null>(null);
-  const [uploadedArtwork, setUploadedArtwork] = useState<{ file: File; dataUrl: string } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadedArtworkName, setUploadedArtworkName] = useState<string | null>(null);
   const [hasManualZoom, setHasManualZoom] = useState<boolean>(false);
   const [hasManualOffset, setHasManualOffset] = useState<boolean>(false);
   const [showLargeText, setShowLargeText] = useState<boolean>(false);
@@ -202,19 +201,6 @@ export default function DesignerPage() {
     widthMm: DEFAULT_LAYOUT.metrics.requiredWidthMm,
     heightMm: DEFAULT_LAYOUT.metrics.requiredHeightMm,
   });
-  const pdfPreview = useMemo<{ pdfUrl: string | null; pageImages: string[] } | null>(() => {
-    if (!artworkSrc) {
-      return null;
-    }
-
-    const previewSource = uploadedArtwork?.dataUrl ?? artworkSrc;
-
-    return {
-      pdfUrl: uploadedArtwork?.dataUrl ?? null,
-      pageImages: [previewSource],
-    };
-  }, [artworkSrc, uploadedArtwork]);
-  const isGeneratingPdf = false;
   const layout = useMemo(() => computeStackLayout(books), [books]);
   const artworkBounds = useMemo(
     () => computeArtworkBounds(layout.metrics, artworkDimensionsMm),
@@ -231,7 +217,6 @@ export default function DesignerPage() {
 
   useEffect(() => {
     return () => {
-      pendingFileReaderRef.current?.abort();
       if (artworkObjectUrlRef.current) {
         URL.revokeObjectURL(artworkObjectUrlRef.current);
         artworkObjectUrlRef.current = null;
@@ -475,56 +460,32 @@ export default function DesignerPage() {
                     }
                     if (file.type && !file.type.startsWith("image/")) {
                       setUploadError("Please choose an image file (PNG, JPG, or similar).");
-                      setUploadedArtwork(null);
+                      setUploadedArtworkName(null);
                       return;
                     }
 
                     setUploadError(null);
-
-                    const previousArtwork = uploadedArtwork;
-                    const previousArtworkSrc = artworkSrc;
-
-                    if (pendingFileReaderRef.current) {
-                      pendingFileReaderRef.current.abort();
+                    const previousObjectUrl = artworkObjectUrlRef.current;
+                    if (previousObjectUrl) {
+                      URL.revokeObjectURL(previousObjectUrl);
                     }
 
-                    const reader = new FileReader();
-                    pendingFileReaderRef.current = reader;
-
-                    reader.onload = () => {
-                      pendingFileReaderRef.current = null;
-                      const result = reader.result;
-                      if (typeof result !== "string") {
-                        setUploadError("We couldn't read that image. Please try another file.");
-                        setUploadedArtwork(previousArtwork ?? null);
-                        setArtworkSrc(previousArtworkSrc);
-                        return;
-                      }
-
-                      setUploadedArtwork({ file, dataUrl: result });
-                      setArtOffsetMm({ x: 0, y: 0 });
-                      setArtZoom(1);
-                      setHasManualOffset(false);
-                      setHasManualZoom(false);
-                      setArtworkSrc(result);
-                    };
-
-                    reader.onerror = () => {
-                      pendingFileReaderRef.current = null;
-                      setUploadError("We couldn't read that image. Please try another file.");
-                      setUploadedArtwork(previousArtwork ?? null);
-                      setArtworkSrc(previousArtworkSrc);
-                    };
-
-                    reader.readAsDataURL(file);
+                    const nextObjectUrl = URL.createObjectURL(file);
+                    artworkObjectUrlRef.current = nextObjectUrl;
+                    setArtworkSrc(nextObjectUrl);
+                    setUploadedArtworkName(file.name);
+                    setArtOffsetMm({ x: 0, y: 0 });
+                    setArtZoom(1);
+                    setHasManualOffset(false);
+                    setHasManualZoom(false);
                   }}
                   className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-brand/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand"
                 />
                 <span className={uploadError ? "text-xs font-medium text-rose-600" : "text-xs text-slate-500"}>
                   {uploadError
                     ? uploadError
-                    : uploadedArtwork
-                      ? `Using ${uploadedArtwork.file.name} for the live and PDF previews.`
+                    : uploadedArtworkName
+                      ? `Using ${uploadedArtworkName} for the live preview.`
                       : "Upload an image to replace the default artwork."}
                 </span>
               </label>
@@ -725,62 +686,6 @@ export default function DesignerPage() {
                 </dd>
               </div>
             </dl>
-          </section>
-
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <header className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900">PDF layout preview</h2>
-                <p className="text-sm text-slate-500">11×17 in sheet centred on the stack with live artwork alignment.</p>
-              </div>
-              {pdfPreview?.pdfUrl ? (
-                <a
-                  href={pdfPreview.pdfUrl}
-                  download="flyleaf-mockup.pdf"
-                  className="inline-flex items-center rounded-lg border border-brand px-3 py-2 text-sm font-semibold text-brand transition hover:bg-brand/10"
-                >
-                  Download PDF
-                </a>
-              ) : null}
-            </header>
-
-            <p className="mt-4 text-sm text-slate-600">
-              The preview updates automatically whenever you tweak books, text, or artwork positioning above.
-            </p>
-
-            <div className="mt-4 space-y-4">
-              {pdfPreview ? (
-                pdfPreview.pageImages.length > 0 ? (
-                  <div className="space-y-6">
-                    {pdfPreview.pageImages.map((imageUrl, index) => (
-                      <figure
-                        key={`${imageUrl}-${index}`}
-                        className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={imageUrl} alt={`PDF page ${index + 1}`} className="block w-full" />
-                        <figcaption className="border-t border-slate-200 bg-white px-4 py-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                          Page {index + 1}
-                        </figcaption>
-                      </figure>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-100/70 py-16 text-center text-sm text-slate-500">
-                    PDF preview will appear once at least one spine is defined.
-                  </div>
-                )
-              ) : (
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-100/70 py-16 text-center text-sm text-slate-500">
-                  {isGeneratingPdf ? "Generating PDF preview…" : "PDF preview will appear once the artwork is ready."}
-                </div>
-              )}
-              {isGeneratingPdf ? (
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Rendering latest layout…</p>
-              ) : (
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Latest layout ready</p>
-              )}
-            </div>
           </section>
         </div>
       </section>
