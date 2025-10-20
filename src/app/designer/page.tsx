@@ -189,6 +189,7 @@ export default function DesignerPage() {
   const [artZoom, setArtZoom] = useState<number>(1);
   const [artworkSrc, setArtworkSrc] = useState<string>(DEFAULT_ARTWORK_SRC);
   const pendingFileReaderRef = useRef<FileReader | null>(null);
+  const artworkObjectUrlRef = useRef<string | null>(null);
   const [uploadedArtwork, setUploadedArtwork] = useState<{ file: File; dataUrl: string } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [hasManualZoom, setHasManualZoom] = useState<boolean>(false);
@@ -231,6 +232,10 @@ export default function DesignerPage() {
   useEffect(() => {
     return () => {
       pendingFileReaderRef.current?.abort();
+      if (artworkObjectUrlRef.current) {
+        URL.revokeObjectURL(artworkObjectUrlRef.current);
+        artworkObjectUrlRef.current = null;
+      }
     };
   }, []);
 
