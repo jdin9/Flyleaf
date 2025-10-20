@@ -202,18 +202,18 @@ export default function DesignerPage() {
     widthMm: DEFAULT_LAYOUT.metrics.requiredWidthMm,
     heightMm: DEFAULT_LAYOUT.metrics.requiredHeightMm,
   });
+  const previewArtworkSrc = uploadedArtwork?.dataUrl ?? artworkSrc;
+
   const pdfPreview = useMemo<{ pdfUrl: string | null; pageImages: string[] } | null>(() => {
-    if (!artworkSrc) {
+    if (!previewArtworkSrc) {
       return null;
     }
 
-    const previewSource = uploadedArtwork?.dataUrl ?? artworkSrc;
-
     return {
       pdfUrl: uploadedArtwork?.dataUrl ?? null,
-      pageImages: [previewSource],
+      pageImages: [previewArtworkSrc],
     };
-  }, [artworkSrc, uploadedArtwork]);
+  }, [previewArtworkSrc, uploadedArtwork]);
   const isGeneratingPdf = false;
   const layout = useMemo(() => computeStackLayout(books), [books]);
   const artworkBounds = useMemo(
@@ -254,12 +254,12 @@ export default function DesignerPage() {
         heightMm: height / PREVIEW_SCALE,
       });
     };
-    image.src = artworkSrc;
+    image.src = previewArtworkSrc;
 
     return () => {
       isCancelled = true;
     };
-  }, [artworkSrc]);
+  }, [previewArtworkSrc]);
 
   useEffect(() => {
     setArtZoom((current) => {
@@ -483,10 +483,15 @@ export default function DesignerPage() {
 
                     const previousArtwork = uploadedArtwork;
                     const previousArtworkSrc = artworkSrc;
+                    const previousObjectUrl = artworkObjectUrlRef.current;
 
                     if (pendingFileReaderRef.current) {
                       pendingFileReaderRef.current.abort();
                     }
+
+                    const nextObjectUrl = URL.createObjectURL(file);
+                    artworkObjectUrlRef.current = nextObjectUrl;
+                    setArtworkSrc(nextObjectUrl);
 
                     const reader = new FileReader();
                     pendingFileReaderRef.current = reader;
@@ -497,23 +502,49 @@ export default function DesignerPage() {
                       if (typeof result !== "string") {
                         setUploadError("We couldn't read that image. Please try another file.");
                         setUploadedArtwork(previousArtwork ?? null);
+                        if (artworkObjectUrlRef.current === nextObjectUrl) {
+                          URL.revokeObjectURL(nextObjectUrl);
+                          artworkObjectUrlRef.current = previousObjectUrl ?? null;
+                        }
                         setArtworkSrc(previousArtworkSrc);
                         return;
                       }
 
                       setUploadedArtwork({ file, dataUrl: result });
+                      setArtworkSrc(result);
                       setArtOffsetMm({ x: 0, y: 0 });
                       setArtZoom(1);
                       setHasManualOffset(false);
                       setHasManualZoom(false);
-                      setArtworkSrc(result);
+                      if (previousObjectUrl && previousObjectUrl !== nextObjectUrl) {
+                        URL.revokeObjectURL(previousObjectUrl);
+                      }
+                      if (artworkObjectUrlRef.current === nextObjectUrl) {
+                        URL.revokeObjectURL(nextObjectUrl);
+                        artworkObjectUrlRef.current = null;
+                      }
+                      setUploadError(null);
                     };
 
                     reader.onerror = () => {
                       pendingFileReaderRef.current = null;
                       setUploadError("We couldn't read that image. Please try another file.");
                       setUploadedArtwork(previousArtwork ?? null);
+                      if (artworkObjectUrlRef.current === nextObjectUrl) {
+                        URL.revokeObjectURL(nextObjectUrl);
+                        artworkObjectUrlRef.current = previousObjectUrl ?? null;
+                      }
                       setArtworkSrc(previousArtworkSrc);
+                    };
+
+                    reader.onabort = () => {
+                      pendingFileReaderRef.current = null;
+                      if (artworkObjectUrlRef.current === nextObjectUrl) {
+                        URL.revokeObjectURL(nextObjectUrl);
+                        artworkObjectUrlRef.current = previousObjectUrl ?? null;
+                        setArtworkSrc(previousArtworkSrc);
+                      }
+                      setUploadedArtwork(previousArtwork ?? null);
                     };
 
                     reader.readAsDataURL(file);
@@ -666,7 +697,7 @@ export default function DesignerPage() {
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={artworkSrc}
+                      src={previewArtworkSrc}
                       alt="Uploaded artwork background"
                       className="pointer-events-none absolute left-1/2 top-1/2 select-none"
                       style={artImageStyle}
