@@ -459,6 +459,10 @@ export default function DesignerPage() {
                 <input
                   type="file"
                   accept="image/*"
+                  onClick={(event) => {
+                    // Reset the native value so selecting the same file again still triggers a change event
+                    event.currentTarget.value = "";
+                  }}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (!file) {
