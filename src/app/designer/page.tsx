@@ -464,6 +464,10 @@ export default function DesignerPage() {
                 <input
                   type="file"
                   accept="image/*"
+                  onClick={(event) => {
+                    // Reset the native value so selecting the same file again still triggers a change event
+                    event.currentTarget.value = "";
+                  }}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (!file) {
@@ -478,12 +482,7 @@ export default function DesignerPage() {
                     setUploadError(null);
 
                     const previousArtwork = uploadedArtwork;
-                    const previousPreviewUrl = artworkObjectUrlRef.current;
                     const previousArtworkSrc = artworkSrc;
-                    const nextPreviewUrl = URL.createObjectURL(file);
-
-                    artworkObjectUrlRef.current = nextPreviewUrl;
-                    setArtworkSrc(nextPreviewUrl);
 
                     if (pendingFileReaderRef.current) {
                       pendingFileReaderRef.current.abort();
@@ -499,13 +498,7 @@ export default function DesignerPage() {
                         setUploadError("We couldn't read that image. Please try another file.");
                         setUploadedArtwork(previousArtwork ?? null);
                         setArtworkSrc(previousArtworkSrc);
-                        artworkObjectUrlRef.current = previousPreviewUrl ?? null;
-                        URL.revokeObjectURL(nextPreviewUrl);
                         return;
-                      }
-
-                      if (previousPreviewUrl && previousPreviewUrl !== nextPreviewUrl) {
-                        URL.revokeObjectURL(previousPreviewUrl);
                       }
 
                       setUploadedArtwork({ file, dataUrl: result });
@@ -514,11 +507,6 @@ export default function DesignerPage() {
                       setHasManualOffset(false);
                       setHasManualZoom(false);
                       setArtworkSrc(result);
-
-                      if (artworkObjectUrlRef.current === nextPreviewUrl) {
-                        artworkObjectUrlRef.current = null;
-                      }
-                      URL.revokeObjectURL(nextPreviewUrl);
                     };
 
                     reader.onerror = () => {
@@ -526,8 +514,6 @@ export default function DesignerPage() {
                       setUploadError("We couldn't read that image. Please try another file.");
                       setUploadedArtwork(previousArtwork ?? null);
                       setArtworkSrc(previousArtworkSrc);
-                      artworkObjectUrlRef.current = previousPreviewUrl ?? null;
-                      URL.revokeObjectURL(nextPreviewUrl);
                     };
 
                     reader.readAsDataURL(file);
