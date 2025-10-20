@@ -239,12 +239,12 @@ export default function DesignerPage() {
         heightMm: height / PREVIEW_SCALE,
       });
     };
-    image.src = artworkSrc;
+    image.src = previewArtworkSrc;
 
     return () => {
       isCancelled = true;
     };
-  }, [artworkSrc]);
+  }, [previewArtworkSrc]);
 
   useEffect(() => {
     setArtZoom((current) => {
@@ -627,7 +627,7 @@ export default function DesignerPage() {
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={artworkSrc}
+                      src={previewArtworkSrc}
                       alt="Uploaded artwork background"
                       className="pointer-events-none absolute left-1/2 top-1/2 select-none"
                       style={artImageStyle}
