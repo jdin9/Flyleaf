@@ -201,7 +201,18 @@ export default function DesignerPage() {
     widthMm: DEFAULT_LAYOUT.metrics.requiredWidthMm,
     heightMm: DEFAULT_LAYOUT.metrics.requiredHeightMm,
   });
-  const pdfPreview: { pdfUrl: string; pageImages: string[] } | null = null;
+  const pdfPreview = useMemo<{ pdfUrl: string | null; pageImages: string[] } | null>(() => {
+    if (!artworkSrc) {
+      return null;
+    }
+
+    const previewSource = uploadedArtwork?.dataUrl ?? artworkSrc;
+
+    return {
+      pdfUrl: uploadedArtwork?.dataUrl ?? null,
+      pageImages: [previewSource],
+    };
+  }, [artworkSrc, uploadedArtwork]);
   const isGeneratingPdf = false;
   const layout = useMemo(() => computeStackLayout(books), [books]);
   const artworkBounds = useMemo(
@@ -456,11 +467,13 @@ export default function DesignerPage() {
                     if (file.type && !file.type.startsWith("image/")) {
                       setUploadError("Please choose an image file (PNG, JPG, or similar).");
                       setUploadedArtwork(null);
-                      event.target.value = "";
                       return;
                     }
 
                     setUploadError(null);
+
+                    const previousArtwork = uploadedArtwork;
+                    const previousArtworkSrc = artworkSrc;
 
                     if (pendingFileReaderRef.current) {
                       pendingFileReaderRef.current.abort();
@@ -474,23 +487,27 @@ export default function DesignerPage() {
                       const result = reader.result;
                       if (typeof result !== "string") {
                         setUploadError("We couldn't read that image. Please try another file.");
+                        setUploadedArtwork(previousArtwork ?? null);
+                        setArtworkSrc(previousArtworkSrc);
                         return;
                       }
+
                       setUploadedArtwork({ file, dataUrl: result });
-                      setArtworkSrc(result);
                       setArtOffsetMm({ x: 0, y: 0 });
                       setArtZoom(1);
                       setHasManualOffset(false);
                       setHasManualZoom(false);
+                      setArtworkSrc(result);
                     };
 
                     reader.onerror = () => {
                       pendingFileReaderRef.current = null;
                       setUploadError("We couldn't read that image. Please try another file.");
+                      setUploadedArtwork(previousArtwork ?? null);
+                      setArtworkSrc(previousArtworkSrc);
                     };
 
                     reader.readAsDataURL(file);
-                    event.target.value = "";
                   }}
                   className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-brand/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand"
                 />
@@ -707,7 +724,7 @@ export default function DesignerPage() {
                 <h2 className="text-xl font-semibold text-slate-900">PDF layout preview</h2>
                 <p className="text-sm text-slate-500">11×17 in sheet centred on the stack with live artwork alignment.</p>
               </div>
-              {pdfPreview ? (
+              {pdfPreview?.pdfUrl ? (
                 <a
                   href={pdfPreview.pdfUrl}
                   download="flyleaf-mockup.pdf"
