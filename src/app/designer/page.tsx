@@ -456,7 +456,6 @@ export default function DesignerPage() {
                     if (file.type && !file.type.startsWith("image/")) {
                       setUploadError("Please choose an image file (PNG, JPG, or similar).");
                       setUploadedArtwork(null);
-                      event.target.value = "";
                       return;
                     }
 
@@ -490,7 +489,6 @@ export default function DesignerPage() {
                     };
 
                     reader.readAsDataURL(file);
-                    event.target.value = "";
                   }}
                   className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-brand/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand"
                 />
